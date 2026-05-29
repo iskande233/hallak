@@ -2,6 +2,8 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
+    // أضفنا هذا السطر للربط مع Firebase:
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -20,7 +22,6 @@ android {
 
     defaultConfig {
         applicationId = "com.example.coifer"
-        // قمنا بتغيير الـ minSdk إلى 23 هنا مباشرة لحل مشكلة الفايربيز نهائياً ✅
         minSdk = 23 
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -32,6 +33,14 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+// أضفنا قسم الـ dependencies ليتمكن التطبيق من استخدام مكتبات Firebase
+dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:34.14.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
 }
 
 flutter {

@@ -1,4 +1,4 @@
-package com.example.helloworld
+package com.example.coifer
 
 import io.flutter.embedding.android.FlutterActivity
 

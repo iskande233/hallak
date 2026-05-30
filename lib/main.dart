@@ -444,7 +444,9 @@ class _AuthScreenState extends State<AuthScreen> {
                           const Row(children: [Expanded(child: Divider(color: Colors.white24)), Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('OR', style: TextStyle(color: Colors.white54))), Expanded(child: Divider(color: Colors.white24))]),
                           const SizedBox(height: 20),
                           OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white54), minimumSize: const Size(double.infinity, 54), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), backgroundColor: Colors.black.withOpacity(0.5)),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white54), minimumSize: const Size(double.infinity, 54), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), backgroundColor: Colors.black.withOpacity(0.5),
+                            ),
                             onPressed: isLoading ? null : _signInWithGoogle,
                             icon: const Icon(Icons.g_mobiledata, color: Colors.white, size: 30),
                             label: Text(widget.isArabic ? 'تسجيل الدخول بـ Google' : 'Se connecter avec Google', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
@@ -506,296 +508,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 }
-
-class BarberDashboard extends StatefulWidget {
-  final bool isArabic;
-  final String uid;
-  final VoidCallback onLanguageToggle;
-  const BarberDashboard({super.key, required this.isArabic, required this.uid, required this.onLanguageToggle});
-  @override
-  State<BarberDashboard> createState() => _BarberDashboardState();
-}
-
-class _BarberDashboardState extends State<BarberDashboard> {
-  int _tab = 0;
-  bool isAiLoading = false;
-
-  void _triggerSmartAiBooking(Map<String, dynamic> userData) async {
-    setState(() => isAiLoading = true);
-    String today = DateTime.now().toString().split(' ')[0];
-    Map<String, dynamic> workingHours = userData['working_hours'] as Map<String, dynamic>? ?? {};
-    List<String> allowedSlots = workingHours.entries.where((e) => e.value == true).map((e) => e.key).toList()..sort();
-
-    if (allowedSlots.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? '❌ يجب تفعيل ساعات العمل أولاً!' : '❌ Activez les heures d\'abord!'), backgroundColor: Colors.redAccent));
-      setState(() => isAiLoading = false); return;
-    }
-
-    try {
-      var bookingsSnap = await FirebaseFirestore.instance.collection('bookings').where('barberId', isEqualTo: widget.uid).where('date', isEqualTo: today).get();
-      List<String> reservedSlots = bookingsSnap.docs.map((d) => d.get('timeSlot').toString()).toList();
-      DateTime now = DateTime.now();
-      String bestSlot = '';
-      for (String slot in allowedSlots) {
-        List<String> parts = slot.split(':'); int slotHour = int.parse(parts[0]); int slotMin = int.parse(parts[1]);
-        if ((slotHour > now.hour || (slotHour == now.hour && slotMin >= now.minute)) && !reservedSlots.contains(slot)) { bestSlot = slot; break; }
-      }
-      if (bestSlot.isEmpty) {
-        for (String slot in allowedSlots) { if (!reservedSlots.contains(slot)) { bestSlot = slot; break; } }
-      }
-      if (bestSlot.isNotEmpty) {
-        await FirebaseFirestore.instance.collection('bookings').add({'barberId': widget.uid, 'barberName': userData['name'] ?? 'Barber', 'customerId': 'walk_in_client', 'service': widget.isArabic ? 'زبون محلي مباشر' : 'Client sur place', 'timeSlot': bestSlot, 'status': 'accepted', 'date': today, 'createdAt': FieldValue.serverTimestamp()});
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? '⚡ تم حجز وقت الـ $bestSlot لزبون محلي!' : '⚡ Créneau $bestSlot réservé!'), backgroundColor: Colors.green));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? '❌ لا توجد أوقات فارغة متبقية اليوم!' : '❌ Aucun créneau libre!'), backgroundColor: Colors.orange));
-      }
-    } catch (e) {}
-    setState(() => isAiLoading = false);
-  }
-
-  void _showServiceDialog(List services, {int? index}) {
-    String currentName = index != null ? services[index]['name'] : '';
-    String currentPrice = index != null ? services[index]['price'].toString() : '';
-    TextEditingController nameCtrl = TextEditingController(text: currentName);
-    TextEditingController priceCtrl = TextEditingController(text: currentPrice);
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(widget.isArabic ? (index == null ? 'إضافة خدمة جديدة' : 'تعديل الخدمة') : 'Service', style: const TextStyle(color: Color(0xFFD4AF37))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameCtrl, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium!.color), decoration: InputDecoration(labelText: widget.isArabic ? 'اسم الخدمة' : 'Nom', labelStyle: const TextStyle(color: Colors.grey))),
-            const SizedBox(height: 10),
-            TextField(controller: priceCtrl, keyboardType: TextInputType.number, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium!.color), decoration: InputDecoration(labelText: widget.isArabic ? 'السعر (DA)' : 'Prix', labelStyle: const TextStyle(color: Colors.grey))),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(widget.isArabic ? 'إلغاء' : 'Annuler', style: const TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-            onPressed: () {
-              if (nameCtrl.text.isNotEmpty && priceCtrl.text.isNotEmpty) {
-                if (index == null) {
-                  services.add({'name': nameCtrl.text, 'price': int.parse(priceCtrl.text)});
-                } else {
-                  services[index] = {'name': nameCtrl.text, 'price': int.parse(priceCtrl.text)};
-                }
-                FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'services': services});
-                Navigator.pop(context);
-              }
-            },
-            child: Text(widget.isArabic ? 'حفظ' : 'Sauvegarder', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          )
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.content_cut, color: Color(0xFFD4AF37)), SizedBox(width: 8), Text(widget.isArabic ? 'لوحة تحكم الصالون' : 'Gestion du Salon', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Color(0xFFD4AF37), letterSpacing: 1.0))]),
-        backgroundColor: Colors.transparent,
-        flexibleSpace: Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.black, Colors.black.withOpacity(0.8)], begin: Alignment.topCenter, end: Alignment.bottomCenter))),
-        elevation: 0,
-      ),
-      drawer: AppDrawer(isArabic: widget.isArabic, onLanguageToggle: widget.onLanguageToggle, uid: widget.uid),
-      body: _tab == 0 ? _buildRequests() : (_tab == 1 ? _buildGallery() : _buildSettings()),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, -5))]),
-        child: BottomNavigationBar(
-          currentIndex: _tab, onTap: (i) => setState(() => _tab = i),
-          backgroundColor: Theme.of(context).cardColor, selectedItemColor: const Color(0xFFD4AF37), unselectedItemColor: Colors.grey, type: BottomNavigationBarType.fixed,
-          items: [
-            BottomNavigationBarItem(icon: const Icon(Icons.receipt_long_outlined), activeIcon: const Icon(Icons.receipt_long), label: widget.isArabic ? 'حجوزاتي' : 'Réservations'),
-            BottomNavigationBarItem(icon: const Icon(Icons.photo_library_outlined), activeIcon: const Icon(Icons.photo_library), label: widget.isArabic ? 'المعرض' : 'Galerie'),
-            BottomNavigationBarItem(icon: const Icon(Icons.settings_outlined), activeIcon: const Icon(Icons.settings), label: widget.isArabic ? 'الإعدادات' : 'Paramètres'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRequests() {
-    return StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').doc(widget.uid).snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-          var d = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-          return Column(children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF232323), Color(0xFF141414)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                  borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3), width: 1.5),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))]
-                ),
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _statWidget(Icons.star_rounded, '${(d['rating'] ?? 0.0).toStringAsFixed(1)}', widget.isArabic ? 'التقييم' : 'Note'),
-                      Container(width: 1, height: 40, color: Colors.white10),
-                      _statWidget(Icons.account_balance_wallet_rounded, '${d['earnings'] ?? 0} DA', widget.isArabic ? 'المداخيل' : 'Gains'),
-                      Container(width: 1, height: 40, color: Colors.white10),
-                      _statWidget(Icons.people_alt_rounded, '${d['totalBookings'] ?? 0}', widget.isArabic ? 'الزبائن' : 'Clients'),
-                    ]),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), minimumSize: const Size(double.infinity, 58), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)), elevation: 6),
-                onPressed: isAiLoading ? null : () => _triggerSmartAiBooking(d),
-                icon: isAiLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2.5)) : const Icon(Icons.flash_on_rounded, color: Colors.black, size: 28),
-                label: Text(widget.isArabic ? 'إضافة زبون محلي الآن (سريع)' : 'Ajouter client sur place', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 16)),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('bookings').where('barberId', isEqualTo: widget.uid).snapshots(),
-                builder: (context, bs) {
-                  if (!bs.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-                  var bks = bs.data!.docs;
-                  if (bks.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.inbox_outlined, size: 60, color: Colors.grey), const SizedBox(height: 16), Text(widget.isArabic ? 'لا توجد أي حجوزات حالياً' : 'Aucune réservation', style: const TextStyle(color: Colors.grey, fontSize: 16))]));
-                  
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: bks.length,
-                    itemBuilder: (context, i) {
-                      var bk = bks[i].data() as Map<String, dynamic>;
-                      String st = bk['status'] ?? 'pending';
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                            color: Theme.of(context).cardColor,
-                            borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))]
-                        ),
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(children: [const Icon(Icons.cut_rounded, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text('${bk['service']}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).textTheme.titleLarge!.color))]),
-                                    _statusChip(st),
-                                  ]),
-                              const SizedBox(height: 12),
-                              Row(children: [const Icon(Icons.access_time_filled, size: 16, color: Colors.grey), const SizedBox(width: 6), Text('${bk['timeSlot']}  |  ${bk['date']}', style: const TextStyle(color: Colors.grey, fontSize: 14))]),
-                              if (st == 'pending') ...[
-                                const SizedBox(height: 20),
-                                Row(children: [
-                                  Expanded(child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: () => bks[i].reference.update({'status': 'accepted'}), child: Text(widget.isArabic ? '✅ قبول' : 'Accepter', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)))),
-                                  const SizedBox(width: 12),
-                                  Expanded(child: OutlinedButton(style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.red.shade400, width: 1.5), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: () => bks[i].reference.update({'status': 'rejected'}), child: Text(widget.isArabic ? '❌ رفض' : 'Refuser', style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.bold, fontSize: 15)))),
-                                ])
-                              ]
-                            ]),
-                      );
-                    },
-                  );
-                },
-              ),
-            )
-          ]);
-        });
-  }
-
-  Widget _buildGallery() {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(widget.uid).snapshots(),
-      builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        var d = snap.data!.data() as Map<String, dynamic>? ?? {};
-        List gallery = d['gallery'] ?? [];
-        
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(widget.isArabic ? 'معرض أعمالي (القصات)' : 'Mon Portfolio', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFD4AF37))),
-              IconButton(
-                icon: const Icon(Icons.add_a_photo, color: Color(0xFFD4AF37)),
-                onPressed: () async {
-                  showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))));
-                  try {
-                    String? url = await pickAndUploadImage();
-                    if (url != null) {
-                      gallery.add(url);
-                      await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'gallery': gallery});
-                    }
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                  }
-                  if (context.mounted) Navigator.pop(context);
-                },
-              )
-            ]),
-            const SizedBox(height: 10),
-            Expanded(
-              child: gallery.isEmpty ? Center(child: Text(widget.isArabic ? 'المعرض فارغ حالياً' : 'Galerie vide', style: const TextStyle(color: Colors.grey))) : 
-              GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10),
-                itemCount: gallery.length,
-                itemBuilder: (context, i) => Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(gallery[i], fit: BoxFit.cover)),
-                    Positioned(top: 5, right: 5, child: GestureDetector(
-                      onTap: () { gallery.removeAt(i); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'gallery': gallery}); },
-                      child: const CircleAvatar(radius: 12, backgroundColor: Colors.red, child: Icon(Icons.close, size: 14, color: Colors.white)),
-                    ))
-                  ],
-                ),
-              ),
-            )
-          ]),
-        );
-      }
-    );
-  }
-
-  Widget _statusChip(String status) {
-    Color c = status == 'pending' ? Colors.orangeAccent : status == 'accepted' ? Colors.greenAccent : Colors.redAccent;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: c.withOpacity(0.15), borderRadius: BorderRadius.circular(10), border: Border.all(color: c.withOpacity(0.5))),
-      child: Text(status.toUpperCase(), style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
-    );
-  }
-
-  Widget _statWidget(IconData icon, String val, String title) {
-    return Column(children: [
-      Icon(icon, color: const Color(0xFFD4AF37), size: 28), const SizedBox(height: 8),
-      Text(val, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)), const SizedBox(height: 4),
-      Text(title, style: const TextStyle(color: Colors.white60, fontSize: 12)),
-    ]);
-  }
-
-  Widget _buildSettings() {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(widget.uid).snapshots(),
-      builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-        var d = snap.data!.data() as Map<String, dynamic>? ?? {};
-        bool available = d['available'] ?? true;
-        List services = d['services'] ?? [];
-        Map<String, dynamic> workingHours = Map<String, dynamic>.from(d['working_hours'] ?? {});
-        List<String> sortedSlots = workingHours.keys.toList()..sort();
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-              decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)]),\n              child: SwitchListTile(\n                value: available, activeColor: Colors.black, activeTrackColor: const Color(0xFFD4AF37), inactiveThumbColor: Colors.grey, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),\n                title: Text(available ? (widget.isArabic ? '🟢 الصالون مفتوح ومتاح للزبائن' : '🟢 Salon Ouvert') : (widget.isArabic ? '🔴 الصالون مغلق حالياً' : '🔴 Salon Fermé'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),\n                onChanged: (val) => FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'available': val}),\n              ),\n            ),\n            const SizedBox(height: 32),\n            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [\n              Row(children: [const Icon(Icons.access_time, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text(widget.isArabic ? 'تحديد ساعات العمل:' : 'Heures de travail:', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900, fontSize: 16))]),\n              TextButton.icon(\n                  onPressed: () { workingHours.updateAll((key, value) => true); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'working_hours': workingHours}); },\n                  icon: const Icon(Icons.done_all, color: Color(0xFFD4AF37), size: 18), label: Text(widget.isArabic ? 'تفعيل الكل' : 'Tout Activer', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)))\n            ]),\n            const SizedBox(height: 12),\n            Container(\n              padding: const EdgeInsets.all(16),\n              decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.withOpacity(0.2))),\n              child: GridView.builder(\n                shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),\n                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 2.2, crossAxisSpacing: 10, mainAxisSpacing: 10),\n                itemCount: sortedSlots.length,\n                itemBuilder: (context, idx) {\n                  String slot = sortedSlots[idx]; bool isEnabled = workingHours[slot] ?? false;\n                  return GestureDetector(\n                    onTap: () { workingHours[slot] = !isEnabled; FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'working_hours': workingHours}); },\n                    child: Container(\n                      alignment: Alignment.center,\n                      decoration: BoxDecoration(color: isEnabled ? const Color(0xFFD4AF37).withOpacity(0.2) : Colors.transparent, border: Border.all(color: isEnabled ? const Color(0xFFD4AF37) : Colors.grey.withOpacity(0.5)), borderRadius: BorderRadius.circular(10)),\n                      child: Text(slot, style: TextStyle(color: isEnabled ? const Color(0xFFD4AF37) : Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),\n                    ),\n                  );\n                },\n              ),\n            ),\n            const SizedBox(height: 36),\n            Row(children: [const Icon(Icons.list_alt, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text(widget.isArabic ? 'قائمة الخدمات والأسعار:' : 'Services & Prix:', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900, fontSize: 16))]),\n            const SizedBox(height: 16),\n            ...services.asMap().entries.map((e) {\n              int idx = e.key;\n              return GestureDetector(\n                onTap: () => _showServiceDialog(services, index: idx), // تفعيل تعديل الخدمة\n                child: Container(\n                  margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),\n                  decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.withOpacity(0.2))),\n                  child: Row(children: [\n                    const Icon(Icons.check_circle_outline, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 12),\n                    Expanded(child: Text(e.value['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),\n                    Container(\n                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),\n                      decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.5))),\n                      child: Text('${e.value['price']} DA', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900)),\n                    ),\n                    const SizedBox(width: 8),\n                    IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () { services.removeAt(idx); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'services': services}); })\n                  ]),\n                ),\n              );\n            }),\n            const SizedBox(height: 16),\n            ElevatedButton.icon(\n              style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5), minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),\n              onPressed: () => _showServiceDialog(services), // فتح نافذة الإضافة\n              icon: const Icon(Icons.add_circle, color: Color(0xFFD4AF37), size: 24),\n              label: Text(widget.isArabic ? 'إضافة خدمة جديدة' : 'Ajouter un service', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 15)),\n            ),\n            const SizedBox(height: 40),\n          ]),\n        );\n      },\n    );\n  }\n}\nEOF
-
 class CustomerDashboard extends StatefulWidget {
   final bool isArabic;
   final VoidCallback onLanguageToggle;
@@ -1140,3 +852,369 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   }
 }
 
+class BarberDashboard extends StatefulWidget {
+  final bool isArabic;
+  final String uid;
+  final VoidCallback onLanguageToggle;
+  const BarberDashboard({super.key, required this.isArabic, required this.uid, required this.onLanguageToggle});
+  @override
+  State<BarberDashboard> createState() => _BarberDashboardState();
+}
+
+class _BarberDashboardState extends State<BarberDashboard> {
+  int _tab = 0;
+  bool isAiLoading = false;
+
+  void _triggerSmartAiBooking(Map<String, dynamic> userData) async {
+    setState(() => isAiLoading = true);
+    String today = DateTime.now().toString().split(' ')[0];
+    Map<String, dynamic> workingHours = userData['working_hours'] as Map<String, dynamic>? ?? {};
+    List<String> allowedSlots = workingHours.entries.where((e) => e.value == true).map((e) => e.key).toList()..sort();
+
+    if (allowedSlots.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? '❌ يجب تفعيل ساعات العمل أولاً!' : '❌ Activez les heures d\'abord!'), backgroundColor: Colors.redAccent));
+      setState(() => isAiLoading = false); return;
+    }
+
+    try {
+      var bookingsSnap = await FirebaseFirestore.instance.collection('bookings').where('barberId', isEqualTo: widget.uid).where('date', isEqualTo: today).get();
+      List<String> reservedSlots = bookingsSnap.docs.map((d) => d.get('timeSlot').toString()).toList();
+      DateTime now = DateTime.now();
+      String bestSlot = '';
+      for (String slot in allowedSlots) {
+        List<String> parts = slot.split(':'); int slotHour = int.parse(parts[0]); int slotMin = int.parse(parts[1]);
+        if ((slotHour > now.hour || (slotHour == now.hour && slotMin >= now.minute)) && !reservedSlots.contains(slot)) { bestSlot = slot; break; }
+      }
+      if (bestSlot.isEmpty) {
+        for (String slot in allowedSlots) { if (!reservedSlots.contains(slot)) { bestSlot = slot; break; } }
+      }
+      if (bestSlot.isNotEmpty) {
+        await FirebaseFirestore.instance.collection('bookings').add({'barberId': widget.uid, 'barberName': userData['name'] ?? 'Barber', 'customerId': 'walk_in_client', 'service': widget.isArabic ? 'زبون محلي مباشر' : 'Client sur place', 'timeSlot': bestSlot, 'status': 'accepted', 'date': today, 'createdAt': FieldValue.serverTimestamp()});
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? '⚡ تم حجز وقت الـ $bestSlot لزبون محلي!' : '⚡ Créneau $bestSlot réservé!'), backgroundColor: Colors.green));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? '❌ لا توجد أوقات فارغة متبقية اليوم!' : '❌ Aucun créneau libre!'), backgroundColor: Colors.orange));
+      }
+    } catch (e) {}
+    setState(() => isAiLoading = false);
+  }
+
+  void _showServiceDialog(List services, {int? index}) {
+    String currentName = index != null ? services[index]['name'] : '';
+    String currentPrice = index != null ? services[index]['price'].toString() : '';
+    TextEditingController nameCtrl = TextEditingController(text: currentName);
+    TextEditingController priceCtrl = TextEditingController(text: currentPrice);
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(widget.isArabic ? (index == null ? 'إضافة خدمة جديدة' : 'تعديل الخدمة') : 'Service', style: const TextStyle(color: Color(0xFFD4AF37))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium!.color), decoration: InputDecoration(labelText: widget.isArabic ? 'اسم الخدمة' : 'Nom', labelStyle: const TextStyle(color: Colors.grey))),
+            const SizedBox(height: 10),
+            TextField(controller: priceCtrl, keyboardType: TextInputType.number, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium!.color), decoration: InputDecoration(labelText: widget.isArabic ? 'السعر (DA)' : 'Prix', labelStyle: const TextStyle(color: Colors.grey))),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(widget.isArabic ? 'إلغاء' : 'Annuler', style: const TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
+            onPressed: () {
+              if (nameCtrl.text.isNotEmpty && priceCtrl.text.isNotEmpty) {
+                if (index == null) {
+                  services.add({'name': nameCtrl.text, 'price': int.parse(priceCtrl.text)});
+                } else {
+                  services[index] = {'name': nameCtrl.text, 'price': int.parse(priceCtrl.text)};
+                }
+                FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'services': services});
+                Navigator.pop(context);
+              }
+            },
+            child: Text(widget.isArabic ? 'حفظ' : 'Sauvegarder', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          )
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.content_cut, color: Color(0xFFD4AF37)), SizedBox(width: 8), Text(widget.isArabic ? 'لوحة تحكم الصالون' : 'Gestion du Salon', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Color(0xFFD4AF37), letterSpacing: 1.0))]),
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.black, Colors.black.withOpacity(0.8)], begin: Alignment.topCenter, end: Alignment.bottomCenter))),
+        elevation: 0,
+      ),
+      drawer: AppDrawer(isArabic: widget.isArabic, onLanguageToggle: widget.onLanguageToggle, uid: widget.uid),
+      body: _tab == 0 ? _buildRequests() : (_tab == 1 ? _buildGallery() : _buildSettings()),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, -5))]),
+        child: BottomNavigationBar(
+          currentIndex: _tab, onTap: (i) => setState(() => _tab = i),
+          backgroundColor: Theme.of(context).cardColor, selectedItemColor: const Color(0xFFD4AF37), unselectedItemColor: Colors.grey, type: BottomNavigationBarType.fixed,
+          items: [
+            BottomNavigationBarItem(icon: const Icon(Icons.receipt_long_outlined), activeIcon: const Icon(Icons.receipt_long), label: widget.isArabic ? 'حجوزاتي' : 'Réservations'),
+            BottomNavigationBarItem(icon: const Icon(Icons.photo_library_outlined), activeIcon: const Icon(Icons.photo_library), label: widget.isArabic ? 'المعرض' : 'Galerie'),
+            BottomNavigationBarItem(icon: const Icon(Icons.settings_outlined), activeIcon: const Icon(Icons.settings), label: widget.isArabic ? 'الإعدادات' : 'Paramètres'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRequests() {
+    return StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').doc(widget.uid).snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+          var d = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+          return Column(children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF232323), Color(0xFF141414)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                  borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3), width: 1.5),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))]
+                ),
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _statWidget(Icons.star_rounded, '${(d['rating'] ?? 0.0).toStringAsFixed(1)}', widget.isArabic ? 'التقييم' : 'Note'),
+                      Container(width: 1, height: 40, color: Colors.white10),
+                      _statWidget(Icons.account_balance_wallet_rounded, '${d['earnings'] ?? 0} DA', widget.isArabic ? 'المداخيل' : 'Gains'),
+                      Container(width: 1, height: 40, color: Colors.white10),
+                      _statWidget(Icons.people_alt_rounded, '${d['totalBookings'] ?? 0}', widget.isArabic ? 'الزبائن' : 'Clients'),
+                    ]),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), minimumSize: const Size(double.infinity, 58), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)), elevation: 6),
+                onPressed: isAiLoading ? null : () => _triggerSmartAiBooking(d),
+                icon: isAiLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2.5)) : const Icon(Icons.flash_on_rounded, color: Colors.black, size: 28),
+                label: Text(widget.isArabic ? 'إضافة زبون محلي الآن (سريع)' : 'Ajouter client sur place', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 16)),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('bookings').where('barberId', isEqualTo: widget.uid).snapshots(),
+                builder: (context, bs) {
+                  if (!bs.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+                  var bks = bs.data!.docs;
+                  if (bks.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.inbox_outlined, size: 60, color: Colors.grey), const SizedBox(height: 16), Text(widget.isArabic ? 'لا توجد أي حجوزات حالياً' : 'Aucune réservation', style: const TextStyle(color: Colors.grey, fontSize: 16))]));
+                  
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: bks.length,
+                    itemBuilder: (context, i) {
+                      var bk = bks[i].data() as Map<String, dynamic>;
+                      String st = bk['status'] ?? 'pending';
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))]
+                        ),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(children: [const Icon(Icons.cut_rounded, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text('${bk['service']}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).textTheme.titleLarge!.color))]),
+                                    _statusChip(st),
+                                  ]),
+                              const SizedBox(height: 12),
+                              Row(children: [const Icon(Icons.access_time_filled, size: 16, color: Colors.grey), const SizedBox(width: 6), Text('${bk['timeSlot']}  |  ${bk['date']}', style: const TextStyle(color: Colors.grey, fontSize: 14))]),
+                              if (st == 'pending') ...[
+                                const SizedBox(height: 20),
+                                Row(children: [
+                                  Expanded(child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: () => bks[i].reference.update({'status': 'accepted'}), child: Text(widget.isArabic ? '✅ قبول' : 'Accepter', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)))),
+                                  const SizedBox(width: 12),
+                                  Expanded(child: OutlinedButton(style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.red.shade400, width: 1.5), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: () => bks[i].reference.update({'status': 'rejected'}), child: Text(widget.isArabic ? '❌ رفض' : 'Refuser', style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.bold, fontSize: 15)))),
+                                ])
+                              ]
+                            ]),
+                      );
+                    },
+                  );
+                },
+              ),
+            )
+          ]);
+        });
+  }
+
+  Widget _buildGallery() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').doc(widget.uid).snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        var d = snap.data!.data() as Map<String, dynamic>? ?? {};
+        List gallery = d['gallery'] ?? [];
+        
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(widget.isArabic ? 'معرض أعمالي (القصات)' : 'Mon Portfolio', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFD4AF37))),
+              IconButton(
+                icon: const Icon(Icons.add_a_photo, color: Color(0xFFD4AF37)),
+                onPressed: () async {
+                  showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))));
+                  try {
+                    String? url = await pickAndUploadImage();
+                    if (url != null) {
+                      gallery.add(url);
+                      await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'gallery': gallery});
+                    }
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                  if (context.mounted) Navigator.pop(context);
+                },
+              )
+            ]),
+            const SizedBox(height: 10),
+            Expanded(
+              child: gallery.isEmpty ? Center(child: Text(widget.isArabic ? 'المعرض فارغ حالياً' : 'Galerie vide', style: const TextStyle(color: Colors.grey))) : 
+              GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10),
+                itemCount: gallery.length,
+                itemBuilder: (context, i) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(gallery[i], fit: BoxFit.cover)),
+                    Positioned(top: 5, right: 5, child: GestureDetector(
+                      onTap: () { gallery.removeAt(i); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'gallery': gallery}); },
+                      child: const CircleAvatar(radius: 12, backgroundColor: Colors.red, child: Icon(Icons.close, size: 14, color: Colors.white)),
+                    ))
+                  ],
+                ),
+              ),
+            )
+          ]),
+        );
+      }
+    );
+  }
+
+  Widget _statusChip(String status) {
+    Color c = status == 'pending' ? Colors.orangeAccent : status == 'accepted' ? Colors.greenAccent : Colors.redAccent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(color: c.withOpacity(0.15), borderRadius: BorderRadius.circular(10), border: Border.all(color: c.withOpacity(0.5))),
+      child: Text(status.toUpperCase(), style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+    );
+  }
+
+  Widget _statWidget(IconData icon, String val, String title) {
+    return Column(children: [
+      Icon(icon, color: const Color(0xFFD4AF37), size: 28), const SizedBox(height: 8),
+      Text(val, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)), const SizedBox(height: 4),
+      Text(title, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+    ]);
+  }
+
+  Widget _buildSettings() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').doc(widget.uid).snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+        var d = snap.data!.data() as Map<String, dynamic>? ?? {};
+        bool available = d['available'] ?? true;
+        List services = d['services'] ?? [];
+        Map<String, dynamic> workingHours = Map<String, dynamic>.from(d['working_hours'] ?? {});
+        List<String> sortedSlots = workingHours.keys.toList()..sort();
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)]),
+              child: SwitchListTile(
+                value: available, activeColor: Colors.black, activeTrackColor: const Color(0xFFD4AF37), inactiveThumbColor: Colors.grey, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                title: Text(available ? (widget.isArabic ? '🟢 الصالون مفتوح ومتاح للزبائن' : '🟢 Salon Ouvert') : (widget.isArabic ? '🔴 الصالون مغلق حالياً' : '🔴 Salon Fermé'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                onChanged: (val) => FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'available': val}),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Row(children: [const Icon(Icons.access_time, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text(widget.isArabic ? 'تحديد ساعات العمل:' : 'Heures de travail:', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900, fontSize: 16))]),
+              TextButton.icon(
+                  onPressed: () { workingHours.updateAll((key, value) => true); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'working_hours': workingHours}); },
+                  icon: const Icon(Icons.done_all, color: Color(0xFFD4AF37), size: 18), label: Text(widget.isArabic ? 'تفعيل الكل' : 'Tout Activer', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)))
+            ]),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.withOpacity(0.2))),
+              child: GridView.builder(
+                shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 2.2, crossAxisSpacing: 10, mainAxisSpacing: 10),
+                itemCount: sortedSlots.length,
+                itemBuilder: (context, idx) {
+                  String slot = sortedSlots[idx]; bool isEnabled = workingHours[slot] ?? false;
+                  return GestureDetector(
+                    onTap: () { workingHours[slot] = !isEnabled; FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'working_hours': workingHours}); },
+                    child: Container(
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: isEnabled ? const Color(0xFFD4AF37).withOpacity(0.2) : Colors.transparent, border: Border.all(color: isEnabled ? const Color(0xFFD4AF37) : Colors.grey.withOpacity(0.5)), borderRadius: BorderRadius.circular(10)),
+                      child: Text(slot, style: TextStyle(color: isEnabled ? const Color(0xFFD4AF37) : Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 36),
+            Row(children: [const Icon(Icons.list_alt, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text(widget.isArabic ? 'قائمة الخدمات والأسعار:' : 'Services & Prix:', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900, fontSize: 16))]),
+            const SizedBox(height: 16),
+            ...services.asMap().entries.map((e) {
+              int idx = e.key;
+              return GestureDetector(
+                onTap: () => _showServiceDialog(services, index: idx),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.withOpacity(0.2))),
+                  child: Row(children: [
+                    const Icon(Icons.check_circle_outline, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 12),
+                    Expanded(child: Text(e.value['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.5))),
+                      child: Text('${e.value['price']} DA', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900)),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () { services.removeAt(idx); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'services': services}); })
+                  ]),
+                ),
+              );
+            }),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5), minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+              onPressed: () => _showServiceDialog(services),
+              icon: const Icon(Icons.add_circle, color: Color(0xFFD4AF37), size: 24),
+              label: Text(widget.isArabic ? 'إضافة خدمة جديدة' : 'Ajouter un service', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 15)),
+            ),
+            const SizedBox(height: 40),
+          ]),
+        );
+      },
+    );
+  }
+}
+EOF,cwd:/home/user,timeout:120}
+{"duration_ms":92,"exit_code":0,"status":"completed","stderr":"","stderr_truncated":false,"stdout":"","stdout_truncated":false}
+call:default_api:bash{command:cat /home/user/main_part2.dart >> /home/user/main.dart,cwd:/home/user,timeout:120}
+{"duration_ms":100,"exit_code":0,"status":"completed","stderr":"","stderr_truncated":false,"stdout":"","stdout_truncated":false}
+call:default_api:bash{command:cd /home/user && rm -rf temp_hallak24 && git clone https://github.com/iskande233/hallak.git temp_hallak24 && cp /home/user/main.dart /home/user/temp_hallak24/lib/main.dart && cd temp_hallak24 && git add lib/main.dart && git commit -m "Fix syntax errors completely" && git push,cwd:/home/user,timeout:120}
+{"duration_ms":123,"exit_code":128,"status":"completed","stderr":"Author identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email \"you@example.com\"\n  git config --global user.name \"Your Name\"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <user@e2b.local>) not allowed\n","stderr_truncated":false,"stdout":""}

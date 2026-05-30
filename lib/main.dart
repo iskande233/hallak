@@ -23,8 +23,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<String?> uploadImageToImgBB(File imageFile) async {
   try {
     const String apiKey = '8b3d6dfc3c43bb042f9b84ab3a2f8fc1'; 
-    final uri = Uri.parse('https://api.imgbb.com/1/upload?key=$apiKey');
-    final request = http.MultipartRequest('POST', uri)..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+    final uri = Uri.parse('https://api.imgbb.com/1/upload');
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['key'] = apiKey
+      ..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
     final response = await request.send();
     final responseData = await response.stream.bytesToString();
     final result = json.decode(responseData);
@@ -439,7 +441,18 @@ class _AuthScreenState extends State<AuthScreen> {
                               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
                               : Text(isLogin ? (widget.isArabic ? 'تسجيل الدخول' : 'Connexion') : (widget.isArabic ? 'إنشاء حساب جديد' : 'Créer le compte'), style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
                         ),
-                        if (isLogin) ...[
+                        const SizedBox(height: 20),
+                        const Row(children: [Expanded(child: Divider(color: Colors.white24)), Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('OR', style: TextStyle(color: Colors.white54))), Expanded(child: Divider(color: Colors.white24))]),
+                        const SizedBox(height: 20),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.white54), minimumSize: const Size(double.infinity, 54), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), backgroundColor: Colors.black.withOpacity(0.5),
+                          ),
+                          onPressed: isLoading ? null : _signInWithGoogle,
+                          icon: const Icon(Icons.g_mobiledata, color: Colors.white, size: 30),
+                          label: Text(widget.isArabic ? 'المتابعة بـ Google' : 'Continuer avec Google', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                        ),
+                        if (false) ...[
                           const SizedBox(height: 20),
                           const Row(children: [Expanded(child: Divider(color: Colors.white24)), Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('OR', style: TextStyle(color: Colors.white54))), Expanded(child: Divider(color: Colors.white24))]),
                           const SizedBox(height: 20),
@@ -521,12 +534,20 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
   int _tab = 0; 
 
   Future<void> _contactBarber(String phone) async {
-    final url = Uri.parse("https://wa.me/$phone");
+    final telUrl = Uri.parse("tel:$phone");
+    if (await canLaunchUrl(telUrl)) {
+      await launchUrl(telUrl);
+    } else {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? 'لا يمكن فتح تطبيق الهاتف' : 'Impossible d\'ouvrir le téléphone')));
+    }
+  }
+  
+  Future<void> _openMap(String address) async {
+    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
-      final telUrl = Uri.parse("tel:$phone");
-      if (await canLaunchUrl(telUrl)) await launchUrl(telUrl);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? 'لا يمكن فتح الخرائط' : 'Impossible d\'ouvrir Maps')));
     }
   }
 
@@ -762,15 +783,23 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
               style: OutlinedButton.styleFrom(side: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 12)),
               onPressed: () => _contactBarber(b['phone'] ?? ''),
               icon: const Icon(Icons.phone, size: 18, color: Color(0xFFD4AF37)),
-              label: Text(widget.isArabic ? 'اتصال' : 'Contact', style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 14, fontWeight: FontWeight.bold)),
+              label: Text(widget.isArabic ? 'اتصال' : 'Contact', style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.bold)),
             )),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
+            Expanded(
+                child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(side: BorderSide(color: const Color(0xFFD4AF37).withOpacity(0.5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 12)),
+              onPressed: () => _openMap(b['address'] ?? ''),
+              icon: const Icon(Icons.location_on, size: 18, color: Color(0xFFD4AF37)),
+              label: Text(widget.isArabic ? 'الموقع' : 'Carte', style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 12, fontWeight: FontWeight.bold)),
+            )),
+            const SizedBox(width: 8),
             Expanded(
                 child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 12), elevation: 5),
               onPressed: available ? () => _showBookingSheet(doc) : null,
               icon: const Icon(Icons.calendar_month, size: 18, color: Colors.black),
-              label: Text(widget.isArabic ? 'احجز الآن' : 'Réserver', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+              label: Text(widget.isArabic ? 'احجز' : 'Réserver', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
             )),
           ])
         ]),

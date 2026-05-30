@@ -391,7 +391,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                             permission = await Geolocator.requestPermission();
                                             if (permission == LocationPermission.denied) throw 'Location permissions are denied';
                                           }
-                                          Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+                                          Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low, timeLimit: const Duration(seconds: 10));
                                           _addressCtrl.text = "${position.latitude}, ${position.longitude}";
                                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? '✅ تم تحديد الموقع بنجاح' : '✅ Position trouvée'), backgroundColor: Colors.green));
                                         } catch (e) {

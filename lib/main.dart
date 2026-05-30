@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,8 +9,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -19,15 +21,27 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
+Future<String?> uploadImageToImgBB(File imageFile) async {
+  try {
+    const String apiKey = '8b3d6dfc3c43bb042f9b84ab3a2f8fc1'; 
+    final uri = Uri.parse('https://api.imgbb.com/1/upload?key=$apiKey');
+    final request = http.MultipartRequest('POST', uri)..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+    final response = await request.send();
+    final responseData = await response.stream.bytesToString();
+    final result = json.decode(responseData);
+    if (result['success']) return result['data']['url']; 
+  } catch (e) {
+    debugPrint("Image Upload Error: $e");
+  }
+  return null;
+}
+
 Future<String?> pickAndUploadImage() async {
   final picker = ImagePicker();
-  final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+  final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
   if (image == null) return null;
   File file = File(image.path);
-  String fileName = 'images/${DateTime.now().millisecondsSinceEpoch}.png';
-  Reference ref = FirebaseStorage.instance.ref().child(fileName);
-  await ref.putFile(file);
-  return await ref.getDownloadURL();
+  return await uploadImageToImgBB(file);
 }
 
 void main() async {
@@ -40,7 +54,6 @@ void main() async {
   const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
   const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
   
-  // تصحيح الخطأ هنا (initializationSettings)
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
@@ -230,9 +243,11 @@ class AppDrawer extends StatelessWidget {
       String? url = await pickAndUploadImage();
       if (url != null) {
         await FirebaseFirestore.instance.collection('users').doc(uid).update({'avatarUrl': url});
+      } else {
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم اختيار صورة')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
     if (context.mounted) Navigator.pop(context);
   }
@@ -309,6 +324,41 @@ class _AuthScreenState extends State<AuthScreen> {
     '16:00': true, '17:00': true, '18:00': true, '19:00': true, '20:00': true, '21:00': true, '22:00': true,
   };
 
+  void _signInWithGoogle() async {
+    setState(() => isLoading = true);
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        setState(() => isLoading = false);
+        return; // المستخدم ألغى العملية
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      UserCredential c = await FirebaseAuth.instance.signInWithCredential(credential);
+      
+      var userDoc = await FirebaseFirestore.instance.collection('users').doc(c.user!.uid).get();
+      if (!userDoc.exists) {
+        await FirebaseFirestore.instance.collection('users').doc(c.user!.uid).set({
+          'uid': c.user!.uid, 'name': c.user!.displayName ?? 'User', 'email': c.user!.email ?? '', 'phone': '',
+          'role': 'Customer', 'avatarUrl': c.user!.photoURL ?? '', 'barberType': null,
+          'rating': 5.0, 'totalRatings': 1, 'earnings': 0, 'totalBookings': 0, 'available': true, 'favorites': [], 'gallery': [],
+          'createdAt': FieldValue.serverTimestamp(),
+          'address': null,
+          'working_hours': null,
+          'services': []
+        });
+      }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Google Sign-In Error: $e'), backgroundColor: Colors.redAccent));
+    }
+    if (mounted) setState(() => isLoading = false);
+  }
+
   void _submit() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) return;
     setState(() => isLoading = true);
@@ -328,9 +378,9 @@ class _AuthScreenState extends State<AuthScreen> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.redAccent));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.redAccent));
     }
-    setState(() => isLoading = false);
+    if (mounted) setState(() => isLoading = false);
   }
 
   @override
@@ -431,6 +481,21 @@ class _AuthScreenState extends State<AuthScreen> {
                               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
                               : Text(isLogin ? (widget.isArabic ? 'تسجيل الدخول' : 'Connexion') : (widget.isArabic ? 'إنشاء حساب جديد' : 'Créer le compte'), style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
                         ),
+                        
+                        // زر الدخول باستخدام جوجل
+                        if (isLogin) ...[
+                          const SizedBox(height: 20),
+                          const Row(children: [Expanded(child: Divider(color: Colors.white24)), Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('OR', style: TextStyle(color: Colors.white54))), Expanded(child: Divider(color: Colors.white24))]),
+                          const SizedBox(height: 20),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white54), minimumSize: const Size(double.infinity, 54), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), backgroundColor: Colors.black.withOpacity(0.5),
+                            ),
+                            onPressed: isLoading ? null : _signInWithGoogle,
+                            icon: const Icon(Icons.g_mobiledata, color: Colors.white, size: 30),
+                            label: Text(widget.isArabic ? 'تسجيل الدخول بـ Google' : 'Se connecter avec Google', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                          )
+                        ]
                       ]),
                     ),
                     const SizedBox(height: 30),
@@ -1119,76 +1184,4 @@ class _BarberDashboardState extends State<BarberDashboard> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Container(
-              decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)]),
-              child: SwitchListTile(
-                value: available, activeColor: Colors.black, activeTrackColor: const Color(0xFFD4AF37), inactiveThumbColor: Colors.grey, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                title: Text(available ? (widget.isArabic ? '🟢 الصالون مفتوح ومتاح للزبائن' : '🟢 Salon Ouvert') : (widget.isArabic ? '🔴 الصالون مغلق حالياً' : '🔴 Salon Fermé'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                onChanged: (val) => FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'available': val}),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Row(children: [const Icon(Icons.access_time, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text(widget.isArabic ? 'تحديد ساعات العمل:' : 'Heures de travail:', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900, fontSize: 16))]),
-              TextButton.icon(
-                  onPressed: () { workingHours.updateAll((key, value) => true); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'working_hours': workingHours}); },
-                  icon: const Icon(Icons.done_all, color: Color(0xFFD4AF37), size: 18), label: Text(widget.isArabic ? 'تفعيل الكل' : 'Tout Activer', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)))
-            ]),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.withOpacity(0.2))),
-              child: GridView.builder(
-                shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 2.2, crossAxisSpacing: 10, mainAxisSpacing: 10),
-                itemCount: sortedSlots.length,
-                itemBuilder: (context, idx) {
-                  String slot = sortedSlots[idx]; bool isEnabled = workingHours[slot] ?? false;
-                  return GestureDetector(
-                    onTap: () { workingHours[slot] = !isEnabled; FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'working_hours': workingHours}); },
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: isEnabled ? const Color(0xFFD4AF37).withOpacity(0.2) : Colors.transparent, border: Border.all(color: isEnabled ? const Color(0xFFD4AF37) : Colors.grey.withOpacity(0.5)), borderRadius: BorderRadius.circular(10)),
-                      child: Text(slot, style: TextStyle(color: isEnabled ? const Color(0xFFD4AF37) : Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 36),
-            Row(children: [const Icon(Icons.list_alt, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text(widget.isArabic ? 'قائمة الخدمات والأسعار:' : 'Services & Prix:', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900, fontSize: 16))]),
-            const SizedBox(height: 16),
-            ...services.asMap().entries.map((e) {
-              int idx = e.key;
-              return GestureDetector(
-                onTap: () => _showServiceDialog(services, index: idx), // تفعيل تعديل الخدمة
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.withOpacity(0.2))),
-                  child: Row(children: [
-                    const Icon(Icons.check_circle_outline, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 12),
-                    Expanded(child: Text(e.value['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.5))),
-                      child: Text('${e.value['price']} DA', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900)),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () { services.removeAt(idx); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'services': services}); })
-                  ]),
-                ),
-              );
-            }),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5), minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-              onPressed: () => _showServiceDialog(services), // فتح نافذة الإضافة
-              icon: const Icon(Icons.add_circle, color: Color(0xFFD4AF37), size: 24),
-              label: Text(widget.isArabic ? 'إضافة خدمة جديدة' : 'Ajouter un service', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 15)),
-            ),
-            const SizedBox(height: 40),
-          ]),
-        );
-      },
-    );
-  }
-}
+              decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)]),\n              child: SwitchListTile(\n                value: available, activeColor: Colors.black, activeTrackColor: const Color(0xFFD4AF37), inactiveThumbColor: Colors.grey, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),\n                title: Text(available ? (widget.isArabic ? '🟢 الصالون مفتوح ومتاح للزبائن' : '🟢 Salon Ouvert') : (widget.isArabic ? '🔴 الصالون مغلق حالياً' : '🔴 Salon Fermé'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),\n                onChanged: (val) => FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'available': val}),\n              ),\n            ),\n            const SizedBox(height: 32),\n            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [\n              Row(children: [const Icon(Icons.access_time, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text(widget.isArabic ? 'تحديد ساعات العمل:' : 'Heures de travail:', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900, fontSize: 16))]),\n              TextButton.icon(\n                  onPressed: () { workingHours.updateAll((key, value) => true); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'working_hours': workingHours}); },\n                  icon: const Icon(Icons.done_all, color: Color(0xFFD4AF37), size: 18), label: Text(widget.isArabic ? 'تفعيل الكل' : 'Tout Activer', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)))\n            ]),\n            const SizedBox(height: 12),\n            Container(\n              padding: const EdgeInsets.all(16),\n              decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.withOpacity(0.2))),\n              child: GridView.builder(\n                shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),\n                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 2.2, crossAxisSpacing: 10, mainAxisSpacing: 10),\n                itemCount: sortedSlots.length,\n                itemBuilder: (context, idx) {\n                  String slot = sortedSlots[idx]; bool isEnabled = workingHours[slot] ?? false;\n                  return GestureDetector(\n                    onTap: () { workingHours[slot] = !isEnabled; FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'working_hours': workingHours}); },\n                    child: Container(\n                      alignment: Alignment.center,\n                      decoration: BoxDecoration(color: isEnabled ? const Color(0xFFD4AF37).withOpacity(0.2) : Colors.transparent, border: Border.all(color: isEnabled ? const Color(0xFFD4AF37) : Colors.grey.withOpacity(0.5)), borderRadius: BorderRadius.circular(10)),\n                      child: Text(slot, style: TextStyle(color: isEnabled ? const Color(0xFFD4AF37) : Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),\n                    ),\n                  );\n                },\n              ),\n            ),\n            const SizedBox(height: 36),\n            Row(children: [const Icon(Icons.list_alt, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 8), Text(widget.isArabic ? 'قائمة الخدمات والأسعار:' : 'Services & Prix:', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900, fontSize: 16))]),\n            const SizedBox(height: 16),\n            ...services.asMap().entries.map((e) {\n              int idx = e.key;\n              return GestureDetector(\n                onTap: () => _showServiceDialog(services, index: idx), // تفعيل تعديل الخدمة\n                child: Container(\n                  margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),\n                  decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.withOpacity(0.2))),\n                  child: Row(children: [\n                    const Icon(Icons.check_circle_outline, color: Color(0xFFD4AF37), size: 20), const SizedBox(width: 12),\n                    Expanded(child: Text(e.value['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),\n                    Container(\n                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),\n                      decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.5))),\n                      child: Text('${e.value['price']} DA', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w900)),\n                    ),\n                    const SizedBox(width: 8),\n                    IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () { services.removeAt(idx); FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'services': services}); })\n                  ]),\n                ),\n              );\n            }),\n            const SizedBox(height: 16),\n            ElevatedButton.icon(\n              style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5), minimumSize: const Size(double.infinity, 56), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),\n              onPressed: () => _showServiceDialog(services), // فتح نافذة الإضافة\n              icon: const Icon(Icons.add_circle, color: Color(0xFFD4AF37), size: 24),\n              label: Text(widget.isArabic ? 'إضافة خدمة جديدة' : 'Ajouter un service', style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 15)),\n            ),\n            const SizedBox(height: 40),\n          ]),\n        );\n      },\n    );\n  }\n}\nEOF

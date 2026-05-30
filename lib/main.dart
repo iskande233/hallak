@@ -1212,9 +1212,3 @@ class _BarberDashboardState extends State<BarberDashboard> {
     );
   }
 }
-EOF,cwd:/home/user,timeout:120}
-{"duration_ms":92,"exit_code":0,"status":"completed","stderr":"","stderr_truncated":false,"stdout":"","stdout_truncated":false}
-call:default_api:bash{command:cat /home/user/main_part2.dart >> /home/user/main.dart,cwd:/home/user,timeout:120}
-{"duration_ms":100,"exit_code":0,"status":"completed","stderr":"","stderr_truncated":false,"stdout":"","stdout_truncated":false}
-call:default_api:bash{command:cd /home/user && rm -rf temp_hallak24 && git clone https://github.com/iskande233/hallak.git temp_hallak24 && cp /home/user/main.dart /home/user/temp_hallak24/lib/main.dart && cd temp_hallak24 && git add lib/main.dart && git commit -m "Fix syntax errors completely" && git push,cwd:/home/user,timeout:120}
-{"duration_ms":123,"exit_code":128,"status":"completed","stderr":"Author identity unknown\n\n*** Please tell me who you are.\n\nRun\n\n  git config --global user.email \"you@example.com\"\n  git config --global user.name \"Your Name\"\n\nto set your account's default identity.\nOmit --global to set the identity only in this repository.\n\nfatal: empty ident name (for <user@e2b.local>) not allowed\n","stderr_truncated":false,"stdout":""}

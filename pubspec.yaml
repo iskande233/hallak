@@ -1,5 +1,5 @@
 name: hallaq_dz
-description: "A new Flutter project for Hallaq DZ."
+description: "A premium Barber App developed by ISKANDER KHANTOUCHE."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -15,11 +15,22 @@ dependencies:
   cloud_firestore: ^5.0.1
   geolocator: ^12.0.0
   url_launcher: ^6.3.0
+  firebase_messaging: ^14.7.19
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icon.png"
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "668361410723",
+    "project_id": "hallaqdz",
+    "storage_bucket": "hallaqdz.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:668361410723:android:303d2407118c9b2619d716",
+        "android_client_info": {
+          "package_name": "com.example.coifer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "668361410723-4ebjsalrsrci4v6hf01ee6sk12kkst8p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.coifer",
+            "certificate_hash": "334bb1832d9eb6069972c78dbdb9c4332d684675"
+          }
+        },
+        {
+          "client_id": "668361410723-bnrg99gattklhfo7n9t7aj92imcj2k5m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDifiOZ9ltszATh_MUYZXTJYMPr9qSFLuc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "668361410723-bnrg99gattklhfo7n9t7aj92imcj2k5m.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

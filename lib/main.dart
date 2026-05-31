@@ -11,7 +11,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supa;
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -23,7 +23,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<String?> uploadImageToSupabase(File imageFile) async {
   try {
     final String fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final supabase = Supabase.instance.client;
+    final supabase = supa.Supabase.instance.client;
     await supabase.storage.from('barber_images').upload(fileName, imageFile);
     return supabase.storage.from('barber_images').getPublicUrl(fileName);
   } catch (e) {
@@ -44,7 +44,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   
-  await Supabase.initialize(
+  await supa.Supabase.initialize(
     url: 'https://hrsuzfzmljcptwimboqi.supabase.co',
     anonKey: 'Sb_publishable_e1AWdL2j3_xESrumUDkPpA_zWs-srYs', // The key provided by the user
   );

@@ -11,7 +11,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -20,21 +20,16 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-Future<String?> uploadImageToImgBB(File imageFile) async {
+Future<String?> uploadImageToSupabase(File imageFile) async {
   try {
-    const String apiKey = '8b3d6dfc3c43bb042f9b84ab3a2f8fc1'; 
-    final uri = Uri.parse('https://api.imgbb.com/1/upload');
-    final request = http.MultipartRequest('POST', uri)
-      ..fields['key'] = apiKey
-      ..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
-    final response = await request.send();
-    final responseData = await response.stream.bytesToString();
-    final result = json.decode(responseData);
-    if (result['success']) return result['data']['url']; 
+    final String fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final supabase = Supabase.instance.client;
+    await supabase.storage.from('barber_images').upload(fileName, imageFile);
+    return supabase.storage.from('barber_images').getPublicUrl(fileName);
   } catch (e) {
-    debugPrint("Image Upload Error: $e");
+    debugPrint("Supabase Upload Error: $e");
   }
-  return null;
+  return 'UPLOAD_FAILED';
 }
 
 Future<String?> pickAndUploadImage() async {
@@ -42,12 +37,17 @@ Future<String?> pickAndUploadImage() async {
   final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
   if (image == null) return null;
   File file = File(image.path);
-  return await uploadImageToImgBB(file);
+  return await uploadImageToSupabase(file);
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  
+  await Supabase.initialize(
+    url: 'https://hrsuzfzmljcptwimboqi.supabase.co',
+    anonKey: 'Sb_publishable_e1AWdL2j3_xESrumUDkPpA_zWs-srYs', // The key provided by the user
+  );
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
   const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
@@ -206,14 +206,20 @@ class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key, required this.isArabic, required this.onLanguageToggle, required this.uid});
 
   void _changeAvatar(BuildContext context) async {
-    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))));
+    String? url = await pickAndUploadImage();
+    if (url == null) {
+       // المستخدم فتح المعرض وتراجع
+       return;
+    }
+    if (url == 'UPLOAD_FAILED') {
+       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل رفع الصورة! السيرفر لا يستجيب أو المفتاح خاطئ.')));
+       return;
+    }
+
+    if (context.mounted) showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))));
     try {
-      String? url = await pickAndUploadImage();
-      if (url != null) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({'avatarUrl': url});
-      } else {
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لم يتم اختيار صورة')));
-      }
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({'avatarUrl': url});
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ تم تغيير الصورة بنجاح'), backgroundColor: Colors.green));
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
@@ -1098,15 +1104,20 @@ class _BarberDashboardState extends State<BarberDashboard> {
               IconButton(
                 icon: const Icon(Icons.add_a_photo, color: Color(0xFFD4AF37)),
                 onPressed: () async {
-                  showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))));
+                  String? url = await pickAndUploadImage();
+                  if (url == null) return;
+                  if (url == 'UPLOAD_FAILED') {
+                     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ فشل الرفع. السيرفر ممتلئ أو المفتاح خاطئ.')));
+                     return;
+                  }
+
+                  if (context.mounted) showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))));
                   try {
-                    String? url = await pickAndUploadImage();
-                    if (url != null) {
-                      gallery.add(url);
-                      await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'gallery': gallery});
-                    }
+                    gallery.add(url);
+                    await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({'gallery': gallery});
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ تمت إضافة الصورة للمعرض!'), backgroundColor: Colors.green));
                   } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                   }
                   if (context.mounted) Navigator.pop(context);
                 },

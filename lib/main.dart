@@ -11,7 +11,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as supa;
+import 'package:http/http.dart' as http;
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -20,14 +20,19 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
 
-Future<String?> uploadImageToSupabase(File imageFile) async {
+Future<String?> uploadImageToImgBB(File imageFile) async {
   try {
-    final String fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final supabase = supa.Supabase.instance.client;
-    await supabase.storage.from('barber_images').upload(fileName, imageFile);
-    return supabase.storage.from('barber_images').getPublicUrl(fileName);
+    const String apiKey = '8b3d6dfc3c43bb042f9b84ab3a2f8fc1'; 
+    final uri = Uri.parse('https://api.imgbb.com/1/upload');
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['key'] = apiKey
+      ..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+    final response = await request.send();
+    final responseData = await response.stream.bytesToString();
+    final result = json.decode(responseData);
+    if (result['success']) return result['data']['url']; 
   } catch (e) {
-    debugPrint("Supabase Upload Error: $e");
+    debugPrint("Image Upload Error: $e");
   }
   return 'UPLOAD_FAILED';
 }
@@ -35,19 +40,16 @@ Future<String?> uploadImageToSupabase(File imageFile) async {
 Future<String?> pickAndUploadImage() async {
   final picker = ImagePicker();
   final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
-  if (image == null) return null;
+  if (image == null) return null; // المستخدم ألغى العملية
   File file = File(image.path);
-  return await uploadImageToSupabase(file);
+  return await uploadImageToImgBB(file);
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   
-  await supa.Supabase.initialize(
-    url: 'https://hrsuzfzmljcptwimboqi.supabase.co',
-    anonKey: 'Sb_publishable_e1AWdL2j3_xESrumUDkPpA_zWs-srYs', // The key provided by the user
-  );
+
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
   const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
@@ -301,7 +303,11 @@ class _AuthScreenState extends State<AuthScreen> {
   void _signInWithGoogle() async {
     setState(() => isLoading = true);
     try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      // تمرير Web Client ID مباشرة لضمان التعرف على التطبيق حتى في حال وجود مشكلة في SHA-1
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        serverClientId: '668361410723-bnrg99gattklhfo7n9t7aj92imcj2k5m.apps.googleusercontent.com',
+      );
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         setState(() => isLoading = false);
         return; 

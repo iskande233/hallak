@@ -141,7 +141,7 @@ class _SplashScreenState extends State<SplashScreen> {
               const SizedBox(height: 30),
               const Text('التطبيق رقم واحد للحلاقة في الجزائر', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
               const SizedBox(height: 8),
-              const Text('L'application N°1 de coiffure en Algérie', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
+              const Text('L\'application N°1 de coiffure en Algérie', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70)),
               const SizedBox(height: 50),
               const CircularProgressIndicator(color: Color(0xFFD4AF37)),
             ],
@@ -603,10 +603,10 @@ class _CustomerDashboardState extends State<CustomerDashboard> {
                               }).toList(),
                             ),
                             const SizedBox(height: 24),
-                            Text(widget.isArabic ? '2. اختر الوقت المناسب:' : '2. Choisissez l'heure:', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium!.color, fontSize: 15, fontWeight: FontWeight.bold)),
+                            Text(widget.isArabic ? '2. اختر الوقت المناسب:' : '2. Choisissez l\'heure:', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium!.color, fontSize: 15, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 12),
                             allowedSlots.isEmpty
-                                ? Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Text(widget.isArabic ? 'عذراً، الحلاق لم يحدد ساعات العمل اليوم.' : 'Aucun créneau disponible aujourd'hui.', style: const TextStyle(color: Colors.redAccent)))
+                                ? Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Text(widget.isArabic ? 'عذراً، الحلاق لم يحدد ساعات العمل اليوم.' : 'Aucun créneau disponible aujourd\'hui.', style: const TextStyle(color: Colors.redAccent)))
                                 : Wrap(
                                     spacing: 10, runSpacing: 10,
                                     children: allowedSlots.map<Widget>((t) {
@@ -656,7 +656,7 @@ class _BarberDashboardState extends State<BarberDashboard> {
     List<String> allowedSlots = workingHours.entries.where((e) => e.value == true).map((e) => e.key).toList()..sort();
 
     if (allowedSlots.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? '❌ يجب تفعيل ساعات العمل أولاً!' : '❌ Activez les heures d'abord!'), backgroundColor: Colors.redAccent));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.isArabic ? '❌ يجب تفعيل ساعات العمل أولاً!' : '❌ Activez les heures d\'abord!'), backgroundColor: Colors.redAccent));
       setState(() => isAiLoading = false); return;
     }
 

@@ -32,9 +32,18 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = "upload"
+            keyPassword = "hallaq123"
+            storeFile = file("hallaq.jks")
+            storePassword = "hallaq123"
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
